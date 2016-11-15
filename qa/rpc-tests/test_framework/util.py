@@ -533,12 +533,17 @@ def assert_greater_than(thing1, thing2):
 def assert_raises(exc, fun, *args, **kwds):
     try:
         fun(*args, **kwds)
-    except exc:
-        pass
+    except exc as e:
+        return e
     except Exception as e:
         raise AssertionError("Unexpected exception raised: "+type(e).__name__)
     else:
         raise AssertionError("No exception raised")
+
+def assert_raises_message(exc, message, fun, *args, **kwds):
+    e = assert_raises(exc, fun, *args, **kwds) 
+    if e is not None and message not in e.error['message']:
+        raise AssertionError("Expected substring not found:"+e.error['message'])
 
 def assert_is_hex_string(string):
     try:
