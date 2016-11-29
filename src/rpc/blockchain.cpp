@@ -814,6 +814,36 @@ static bool GetUTXOStats(CCoinsView *view, CCoinsStats &stats)
     return true;
 }
 
+UniValue pruneblockchain(const JSONRPCRequest& request)
+{
+    if (request.fHelp || request.params.size() != 1)
+        throw runtime_error(
+            "pruneblockchain\n"
+            "\nArguments:\n"
+            "1. \"height\"       (int, required) The block height to prune up to.\n");
+
+    if (!fPruneMode)
+        throw JSONRPCError(RPC_METHOD_NOT_FOUND, "Cannot prune blocks because node is not in prune mode.");
+
+    LOCK(cs_main);
+
+    int heightParam = request.params[0].get_int();
+    if (heightParam < 0)
+        throw JSONRPCError(RPC_INVALID_PARAMETER, "Negative block height.");
+
+    unsigned int height = (unsigned int) heightParam;
+    unsigned int chainHeight = (unsigned int) chainActive.Height();
+    if (chainHeight < Params().PruneAfterHeight())
+        throw JSONRPCError(RPC_INTERNAL_ERROR, "Blockchain is too short for pruning.");
+    else if (height > chainHeight)
+        throw JSONRPCError(RPC_INVALID_PARAMETER, "Blockchain is shorter than the attempted prune height.");
+    else if (height > chainHeight - MIN_BLOCKS_TO_KEEP)
+        LogPrint("rpc", "Attempt to prune blocks close to the tip.  Retaining the minimum number of blocks.");
+
+    PruneBlockFilesManual(height);
+    return NullUniValue;
+}
+
 UniValue gettxoutsetinfo(const JSONRPCRequest& request)
 {
     if (request.fHelp || request.params.size() != 0)
@@ -1385,6 +1415,7 @@ static const CRPCCommand commands[] =
     { "blockchain",         "gettxout",               &gettxout,               true  },
     { "blockchain",         "gettxoutsetinfo",        &gettxoutsetinfo,        true  },
     { "blockchain",         "verifychain",            &verifychain,            true  },
+    { "blockchain",         "pruneblockchain",        &pruneblockchain,        true  },
 
     { "blockchain",         "preciousblock",          &preciousblock,          true  },
 
