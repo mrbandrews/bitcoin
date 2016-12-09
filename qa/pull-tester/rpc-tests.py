@@ -151,6 +151,7 @@ testScripts = [
     'signmessages.py',
     'nulldummy.py',
     'import-rescan.py',
+    'bumpfee.py',
 ]
 if ENABLE_ZMQ:
     testScripts.append('zmq_test.py')
