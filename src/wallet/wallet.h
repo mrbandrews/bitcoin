@@ -590,7 +590,7 @@ private:
     void AddToSpends(const COutPoint& outpoint, const uint256& wtxid);
     void AddToSpends(const uint256& wtxid);
 
-    /* Mark a transaction (and its in-wallet descendants) as conflicting with a particular block. */
+    //! Mark a transaction (and its in-wallet descendants) as conflicting with a particular block.
     void MarkConflicted(const uint256& hashBlock, const uint256& hashTx);
 
     void SyncMetaData(std::pair<TxSpends::iterator, TxSpends::iterator>);
@@ -889,6 +889,9 @@ public:
     //! Get wallet transactions that conflict with given transaction (spend same outputs)
     std::set<uint256> GetConflicts(const uint256& txid) const;
 
+    //! Check if a given transaction has any of its outputs spent by another transaction in the wallet
+    bool HasWalletSpend(const uint256& txid) const;
+
     //! Flush wallet (bitdb flush)
     void Flush(bool shutdown=false);
 
@@ -924,6 +927,9 @@ public:
 
     /* Mark a transaction (and it in-wallet descendants) as abandoned so its inputs may be respent. */
     bool AbandonTransaction(const uint256& hashTx);
+
+    /* Mark a transaction as replaced by another transaction (e.g., BIP 125)  */
+    bool MarkReplaced(const uint256& originalHash, const uint256& newHash);
 
     /* Returns the wallets help message */
     static std::string GetWalletHelpString(bool showDebug);
