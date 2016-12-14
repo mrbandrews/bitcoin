@@ -25,15 +25,11 @@ class PruneTest(BitcoinTestFramework):
     def __init__(self):
         super().__init__()
         self.setup_clean_chain = True
-        self.num_nodes = 3
+        self.num_nodes = 5
 
         # Cache for utxos, as the listunspent may take a long time later in the test
         self.utxo_cache_0 = []
         self.utxo_cache_1 = []
-
-    def setup_chain(self):
-        print("Initializing test directory "+self.options.tmpdir)
-        initialize_chain_clean(self.options.tmpdir, 5)
 
     def setup_network(self):
         self.nodes = []
@@ -47,8 +43,8 @@ class PruneTest(BitcoinTestFramework):
         self.nodes.append(start_node(2, self.options.tmpdir, ["-debug","-maxreceivebuffer=20000","-prune=550"], timewait=900))
         self.prunedir = self.options.tmpdir+"/node2/regtest/blocks/"
 
-        # Create node 3 to test manual pruning
-        self.nodes.append(start_node(3, self.options.tmpdir, ["-debug=0","-maxreceivebuffer=20000","-blockmaxsize=999000", "-prune=1"], timewait=900))
+        # Create node 3 to test manual pruning (it will be re-started with manual pruning later)
+        self.nodes.append(start_node(3, self.options.tmpdir, ["-debug=0","-maxreceivebuffer=20000","-blockmaxsize=999000"], timewait=900))
         self.manualdir = self.options.tmpdir+"/node3/regtest/blocks/"
 
         # Create node 4 to test wallet in prune mode, but do not connect
@@ -228,15 +224,17 @@ class PruneTest(BitcoinTestFramework):
         assert(self.nodes[2].getblock(self.forkhash)["height"] == self.forkheight)
 
     def manual_test(self):
+        # at this point, node3 has 995 blocks and has not yet run in prune mode
+        self.nodes[3] = start_node(3, self.options.tmpdir, ["-debug=0"], timewait=900)
+        assert_raises_message(JSONRPCException, "not in prune mode", self.nodes[3].pruneblockchain, 500)
+        stop_node(self.nodes[3],3)
+
+        # now re-start in manual pruning mode
         self.nodes[3] = start_node(3, self.options.tmpdir, ["-debug=0","-prune=1"], timewait=900)
         assert_equal(self.nodes[3].getblockcount(), 995)
 
         # should not prune because chain tip of node 3 (995) < PruneAfterHeight (1000)
-        try:
-            self.nodes[3].pruneblockchain(500)
-            raise AssertionError("pruneblockchain should have failed because not yet at PruneAfterHeight")
-        except JSONRPCException as e:
-            pass
+        assert_raises_message(JSONRPCException, "Blockchain is too short for pruning", self.nodes[3].pruneblockchain, 500)
 
         # mine 6 blocks so we are at height 1001 (i.e., above PruneAfterHeight)
         self.nodes[3].generate(6)
@@ -300,7 +298,8 @@ class PruneTest(BitcoinTestFramework):
         except Exception as detail:
             raise AssertionError("Wallet test: unable to re-start the pruning node")
 
-        # connect a new node for IBD while pruning, then check wallet (see issue #7494)
+        # check that wallet loads loads successfully when restarting a pruned node after IBD.
+        # this was reported to fail in #7494.
         print ("Syncing node 4 to test wallet")
         connect_nodes(self.nodes[0], 4)
         nds = [self.nodes[0], self.nodes[4]]
