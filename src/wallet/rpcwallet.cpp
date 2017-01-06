@@ -16,7 +16,6 @@
 #include "rpc/server.h"
 #include "script/sign.h"
 #include "timedata.h"
-#include "ui_interface.h"
 #include "util.h"
 #include "utilmoneystr.h"
 #include "wallet.h"
@@ -2591,36 +2590,35 @@ UniValue bumpfee(const JSONRPCRequest& request)
 
     if (request.fHelp || request.params.size() < 1 || request.params.size() > 2)
         throw runtime_error(
-                            "bumpfee \"txid\" ( options ) \n"
-                            "\nBumps the fee of an opt-in-RBF transaction T, replacing it with a new transaction B.\n"
-                            "An opt-in RBF transaction with the given txid must be in the wallet.\n"
-                            "The command will pay the additional fee by decreasing (or perhaps removing) its change output.\n"
-                            "If the change output is not big enough to cover the increased fee, the command will currently fail\n"
-                            "instead of adding new inputs to compensate. (A future implementation could improve this.)\n"
-                            "The command will fail if the wallet or mempool contains a transaction that spends one of T's outputs.\n"
-                            "By default, the new fee will be calculated automatically using estimatefee/fallbackfee.\n"
-                            "The user can specify a confirmation target for estimatefee.\n"
-                            "Alternatively, the user can specify totalFee, or use RPC setpaytxfee to set a higher fee rate.\n"
-                            "At a minimum, the new fee rate must be high enough to pay a new relay fee and to enter the node's mempool.\n"
-                            "\nArguments:\n"
-                            "1. \"txid\"              (string, required) The txid to be bumped\n"
-                            "2. options               (object, optional)\n"
-                            "   {\n"
-                            "     \"confTarget\":       \"n\",          (numeric, optional) Confirmation target (in blocks)\n"
-                            "     \"totalFee\":         \"n\",          (numeric, optional) Total fee (NOT feerate) to pay, in satoshis\n"
-                            "   }\n"
-                            "\nResult:\n"
-                            "{\n"
-                            "  \"txid\":    \"value\",   (string)  The id of the new transaction\n"
-                            "  \"oldfee\":    n,         (numeric) Fee of the replaced transaction\n"
-                            "  \"fee\":       n,         (numeric) Fee of the new transaction\n"
-                            "}\n"
-                            "\nExamples:\n"
-                            "\nBump the fee, get the new transaction\'s txid\n"
-                            + HelpExampleCli("bumpfee", "<txid>")
-                            );
+            "bumpfee \"txid\" ( options ) \n"
+            "\nBumps the fee of an opt-in-RBF transaction T, replacing it with a new transaction B.\n"
+            "An opt-in RBF transaction with the given txid must be in the wallet.\n"
+            "The command will pay the additional fee by decreasing (or perhaps removing) its change output.\n"
+            "If the change output is not big enough to cover the increased fee, the command will currently fail\n"
+            "instead of adding new inputs to compensate. (A future implementation could improve this.)\n"
+            "The command will fail if the wallet or mempool contains a transaction that spends one of T's outputs.\n"
+            "By default, the new fee will be calculated automatically using estimatefee/fallbackfee.\n"
+            "The user can specify a confirmation target for estimatefee.\n"
+            "Alternatively, the user can specify totalFee, or use RPC setpaytxfee to set a higher fee rate.\n"
+            "At a minimum, the new fee rate must be high enough to pay a new relay fee and to enter the node's mempool.\n"
+            "\nArguments:\n"
+            "1. \"txid\"              (string, required) The txid to be bumped\n"
+            "2. options               (object, optional)\n"
+            "   {\n"
+            "     \"confTarget\":       \"n\",          (numeric, optional) Confirmation target (in blocks)\n"
+            "     \"totalFee\":         \"n\",          (numeric, optional) Total fee (NOT feerate) to pay, in satoshis\n"
+            "   }\n"
+            "\nResult:\n"
+            "{\n"
+            "  \"txid\":    \"value\",   (string)  The id of the new transaction\n"
+            "  \"oldfee\":    n,         (numeric) Fee of the replaced transaction\n"
+            "  \"fee\":       n,         (numeric) Fee of the new transaction\n"
+            "}\n"
+            "\nExamples:\n"
+            "\nBump the fee, get the new transaction\'s txid\n" +
+            HelpExampleCli("bumpfee", "<txid>"));
 
-    RPCTypeCheck(request.params, boost::assign::list_of(UniValue::VSTR));
+    RPCTypeCheck(request.params, boost::assign::list_of(UniValue::VSTR)(UniValue::VOBJ));
     uint256 hash;
     hash.SetHex(request.params[0].get_str());
 
@@ -2638,7 +2636,7 @@ UniValue bumpfee(const JSONRPCRequest& request)
         LOCK(mempool.cs);
         auto it = mempool.mapTx.find(hash);
         if (it != mempool.mapTx.end() && it->GetCountWithDescendants() > 1)
-          throw JSONRPCError(RPC_MISC_ERROR, "Transaction has descendants in the mempool");
+            throw JSONRPCError(RPC_MISC_ERROR, "Transaction has descendants in the mempool");
     }
 
     if (wtx.GetDepthInMainChain() != 0)
@@ -2648,7 +2646,7 @@ UniValue bumpfee(const JSONRPCRequest& request)
         throw JSONRPCError(RPC_INVALID_ADDRESS_OR_KEY, "Transaction is not BIP 125 replaceable");
 
     if (wtx.mapValue.count("replaced_by_txid"))
-      throw JSONRPCError(RPC_INVALID_REQUEST, strprintf("Cannot bump transaction %s which was already bumped by transaction %s", hash.ToString(), wtx.mapValue.at("replaced_by_txid")));
+        throw JSONRPCError(RPC_INVALID_REQUEST, strprintf("Cannot bump transaction %s which was already bumped by transaction %s", hash.ToString(), wtx.mapValue.at("replaced_by_txid")));
 
     // check that original tx consists entirely of our inputs
     // if not, we can't bump the fee, because the wallet has no way of knowing the value of the other inputs (thus the fee)
@@ -2658,7 +2656,7 @@ UniValue bumpfee(const JSONRPCRequest& request)
     // figure out which output was change
     // if there was no change output or multiple change outputs, fail
     int nOutput = -1;
-    for (size_t i=0; i < wtx.tx->vout.size(); ++i) {
+    for (size_t i = 0; i < wtx.tx->vout.size(); ++i) {
         if (pwalletMain->IsChange(wtx.tx->vout[i])) {
             if (nOutput != -1)
                 throw JSONRPCError(RPC_MISC_ERROR, "Transaction has multiple change outputs");
@@ -2672,7 +2670,6 @@ UniValue bumpfee(const JSONRPCRequest& request)
     int newConfirmTarget = nTxConfirmTarget;
     CAmount totalFee = 0;
     if (request.params.size() > 1) {
-        RPCTypeCheck(request.params, boost::assign::list_of(UniValue::VSTR)(UniValue::VOBJ));
         UniValue options = request.params[1];
         if (options.size() > 2)
             throw JSONRPCError(RPC_INVALID_PARAMETER, "Too many optional parameters");
@@ -2712,9 +2709,8 @@ UniValue bumpfee(const JSONRPCRequest& request)
         if (totalFee < minTotalFee)
             throw JSONRPCError(RPC_INVALID_PARAMETER, strprintf("Invalid totalFee, must be at least oldFee + relayFee: %s", FormatMoney(minTotalFee)));
         nNewFee = totalFee;
-        nNewFeeRate = CFeeRate(totalFee, txSize);
-    }
-    else {
+        nNewFeeRate = CFeeRate(totalFee, txSize); // txSize instead of maxNewTxSize here so minMempoolFeeRate check below is more conservative
+    } else {
         // use the user-defined payTxFee if possible, otherwise use smartfee / fallbackfee
         nNewFeeRate = payTxFee;
         if (nNewFeeRate.GetFeePerK() == 0)
@@ -2736,8 +2732,8 @@ UniValue bumpfee(const JSONRPCRequest& request)
     // moment earlier. In this case, we report an error to the user, who may use totalFee to make an adjustment.
     CFeeRate minMempoolFeeRate = mempool.GetMinFee(GetArg("-maxmempool", DEFAULT_MAX_MEMPOOL_SIZE) * 1000000);
     if (nNewFeeRate.GetFeePerK() < minMempoolFeeRate.GetFeePerK())
-        throw JSONRPCError(RPC_MISC_ERROR, strprintf("New fee rate (%s) is too low to get into the mempool (min rate: %s)", \
-                                                     FormatMoney(nNewFeeRate.GetFeePerK()), FormatMoney(minMempoolFeeRate.GetFeePerK())));
+        throw JSONRPCError(RPC_MISC_ERROR, strprintf("New fee rate (%s) is too low to get into the mempool (min rate: %s)",
+                                               FormatMoney(nNewFeeRate.GetFeePerK()), FormatMoney(minMempoolFeeRate.GetFeePerK())));
 
     // Now modify the output to increase the fee.
     // If the output is not large enough to pay the fee, fail.
@@ -2759,7 +2755,7 @@ UniValue bumpfee(const JSONRPCRequest& request)
     // sign the new tx
     CTransaction txNewConst(tx);
     int nIn = 0;
-    for (auto &input : tx.vin) {
+    for (auto& input : tx.vin) {
         std::map<uint256, CWalletTx>::const_iterator mi = pwalletMain->mapWallet.find(input.prevout.hash);
         assert(mi != pwalletMain->mapWallet.end() && input.prevout.n < mi->second.tx->vout.size());
         const CScript& scriptPubKey = mi->second.tx->vout[input.prevout.n].scriptPubKey;
