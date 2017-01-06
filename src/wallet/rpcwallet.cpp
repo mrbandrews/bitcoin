@@ -2709,7 +2709,7 @@ UniValue bumpfee(const JSONRPCRequest& request)
         if (totalFee < minTotalFee)
             throw JSONRPCError(RPC_INVALID_PARAMETER, strprintf("Invalid totalFee, must be at least oldFee + relayFee: %s", FormatMoney(minTotalFee)));
         nNewFee = totalFee;
-        nNewFeeRate = CFeeRate(totalFee, txSize); // txSize instead of maxNewTxSize here so minMempoolFeeRate check below is more conservative
+        nNewFeeRate = CFeeRate(totalFee, maxNewTxSize);
     } else {
         // use the user-defined payTxFee if possible, otherwise use smartfee / fallbackfee
         nNewFeeRate = payTxFee;
