@@ -3,6 +3,7 @@
 # Distributed under the MIT software license, see the accompanying
 # file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
+from segwit import send_to_witness
 from test_framework.test_framework import BitcoinTestFramework
 from test_framework import blocktools
 from test_framework.mininode import CTransaction
@@ -24,8 +25,9 @@ class BumpFeeTest(BitcoinTestFramework):
 
     def setup_network(self, split=False):
         self.nodes = []
-        self.nodes.append(start_node(0, self.options.tmpdir, ["-debug", "-walletrbf"]))
-        self.nodes.append(start_node(1, self.options.tmpdir, ["-debug"]))
+        common_args = ["-debug", "-prematurewitness", "-walletprematurewitness"]
+        self.nodes.append(start_node(0, self.options.tmpdir, common_args + ["-walletrbf"]))
+        self.nodes.append(start_node(1, self.options.tmpdir, common_args))
         connect_nodes_bi(self.nodes, 0, 1)
         self.is_network_split = False
         self.sync_all()
@@ -48,6 +50,7 @@ class BumpFeeTest(BitcoinTestFramework):
         print("Running tests")
         dest_address = peer_node.getnewaddress()
         test_simple_bumpfee_succeeds(rbf_node, peer_node, dest_address)
+        test_segwit_bumpfee_succeeds(rbf_node, dest_address)
         test_nonrbf_bumpfee_fails(peer_node, dest_address)
         test_notmine_bumpfee_fails(rbf_node, peer_node, dest_address)
         test_bumpfee_with_descendant_fails(rbf_node, rbf_node_address, dest_address)
@@ -78,6 +81,37 @@ def test_simple_bumpfee_succeeds(rbf_node, peer_node, dest_address):
     bumpedwtx = rbf_node.gettransaction(bumped_tx["txid"])
     assert_equal(oldwtx["replaced_by_txid"], bumped_tx["txid"])
     assert_equal(bumpedwtx["replaces_txid"], rbfid)
+
+
+def test_segwit_bumpfee_succeeds(rbf_node, dest_address):
+    # Create a transaction with segwit output, then create an RBF transaction
+    # which spends it, and make sure bumpfee can be called on it.
+
+    segwit_in = next(u for u in rbf_node.listunspent() if u["amount"] == Decimal("0.001"))
+    segwit_out = rbf_node.validateaddress(rbf_node.getnewaddress())["pubkey"]
+    rbf_node.addwitnessaddress(rbf_node.addmultisigaddress(1, [segwit_out]))
+    segwitid = send_to_witness(
+        version=1,
+        node=rbf_node,
+        utxo=segwit_in,
+        pubkey=segwit_out,
+        encode_p2sh=False,
+        amount=Decimal("0.0009"),
+        sign=True)
+
+    rbfraw = rbf_node.createrawtransaction([{
+        'txid': segwitid,
+        'vout': 0,
+        "sequence": BIP125_SEQUENCE_NUMBER
+    }], {dest_address: Decimal("0.0005"),
+         get_change_address(rbf_node): Decimal("0.0003")})
+    rbfsigned = rbf_node.signrawtransaction(rbfraw)
+    rbfid = rbf_node.sendrawtransaction(rbfsigned["hex"])
+    assert rbfid in rbf_node.getrawmempool()
+
+    bumped_tx = rbf_node.bumpfee(rbfid)
+    assert bumped_tx["txid"] in rbf_node.getrawmempool()
+    assert rbfid not in rbf_node.getrawmempool()
 
 
 def test_nonrbf_bumpfee_fails(peer_node, dest_address):
@@ -199,6 +233,21 @@ def create_fund_sign_send(node, outputs, feerate=0):
     signedtx = node.signrawtransaction(fundtx["hex"])
     txid = node.sendrawtransaction(signedtx["hex"])
     return txid
+
+
+def get_change_address(node):
+    """Get a wallet change address.
+
+    There is no wallet RPC to access unused change addresses, so this creates a
+    dummy transaction, calls fundrawtransaction to give add an input and change
+    output, then returns the change address."""
+    dest_address = node.getnewaddress()
+    dest_amount = Decimal("0.00012345")
+    rawtx = node.createrawtransaction([], {dest_address: dest_amount})
+    fundtx = node.fundrawtransaction(rawtx)
+    info = node.decoderawtransaction(fundtx["hex"])
+    return next(address for out in info["vout"]
+                if out["value"] != dest_amount for address in out["scriptPubKey"]["addresses"])
 
 
 def submit_block_with_tx(node, tx):

@@ -2598,7 +2598,7 @@ UniValue bumpfee(const JSONRPCRequest& request)
             "If the change output is not big enough to cover the increased fee, the command will currently fail\n"
             "instead of adding new inputs to compensate. (A future implementation could improve this.)\n"
             "The command will fail if the wallet or mempool contains a transaction that spends one of T's outputs.\n"
-            "By default, the new fee will be calculated automatically using estimatefee/fallbackfee.\n"
+            "By default, the new fee will be calculated automatically using estimatefee.\n"
             "The user can specify a confirmation target for estimatefee.\n"
             "Alternatively, the user can specify totalFee, or use RPC setpaytxfee to set a higher fee rate.\n"
             "At a minimum, the new fee rate must be high enough to pay a new relay fee and to enter the node's mempool.\n"
@@ -2681,12 +2681,13 @@ UniValue bumpfee(const JSONRPCRequest& request)
             },
             true, true);
 
-        if (options.exists("confTarget")) {
+        if (options.exists("confTarget") && options.exists("totalFee")) {
+            throw JSONRPCError(RPC_INVALID_PARAMETER, "confTarget and totalFee options should not both be set. Please provide either a confirmation target for fee estimation or an explicit total fee for the transaction.");
+        } else if (options.exists("confTarget")) {
             newConfirmTarget = options["confTarget"].get_int();
             if (newConfirmTarget <= 0) // upper-bound will be checked by estimatefee/smartfee
                 throw JSONRPCError(RPC_INVALID_PARAMETER, "Invalid confTarget (cannot be <= 0)");
-        }
-        if (options.exists("totalFee")) {
+        } else if (options.exists("totalFee")) {
             totalFee = options["totalFee"].get_int();
             if (totalFee <= 0)
                 throw JSONRPCError(RPC_INVALID_PARAMETER, "Invalid totalFee (cannot be <= 0)");
@@ -2760,10 +2761,11 @@ UniValue bumpfee(const JSONRPCRequest& request)
         std::map<uint256, CWalletTx>::const_iterator mi = pwalletMain->mapWallet.find(input.prevout.hash);
         assert(mi != pwalletMain->mapWallet.end() && input.prevout.n < mi->second.tx->vout.size());
         const CScript& scriptPubKey = mi->second.tx->vout[input.prevout.n].scriptPubKey;
+        const CAmount& amount = mi->second.tx->vout[input.prevout.n].nValue;
         SignatureData sigdata;
-        if (!ProduceSignature(TransactionSignatureCreator(pwalletMain, &txNewConst, nIn, SIGHASH_ALL), scriptPubKey, sigdata))
+        if (!ProduceSignature(TransactionSignatureCreator(pwalletMain, &txNewConst, nIn, amount, SIGHASH_ALL), scriptPubKey, sigdata))
             throw JSONRPCError(RPC_WALLET_ERROR, "Can't sign transaction.");
-        input.scriptSig = sigdata.scriptSig;
+        UpdateTransaction(tx, nIn, sigdata);
         nIn++;
     }
 
