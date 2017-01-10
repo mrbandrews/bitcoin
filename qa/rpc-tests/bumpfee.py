@@ -204,11 +204,13 @@ def test_unconfirmed_not_spendable(rbf_node, rbf_node_address):
     # due to the replaces_txid check in CWallet::AvailableCoins
     assert_equal([t for t in rbf_node.listunspent(0) if t["txid"] == bumpid], [])
 
-    # submit a block with the rbf tx to clear the bump transaction out
-    # of the mempool, then invalidate the block so the rbf transaction will be
-    # put back in the mempool. this makes it possible to check whether the rbf
-    # transaction outputs are spendable before the rbf tx is confirmed.
+    # submit a block with the rbf tx to clear the bump tx out of the mempool,
+    # then call abandon to make sure the wallet doesn't attempt to resubmit the
+    # bump tx, then invalidate the block so the rbf tx will be put back in the
+    # mempool. this makes it possible to check whether the rbf tx outputs are
+    # spendable before the rbf tx is confirmed.
     block = submit_block_with_tx(rbf_node, rbftx)
+    rbf_node.abandontransaction(bumpid)
     rbf_node.invalidateblock(block.hash)
     assert bumpid not in rbf_node.getrawmempool()
     assert rbfid in rbf_node.getrawmempool()
