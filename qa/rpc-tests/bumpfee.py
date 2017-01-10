@@ -213,6 +213,10 @@ def test_unconfirmed_not_spendable(rbf_node, rbf_node_address):
     assert bumpid not in rbf_node.getrawmempool()
     assert rbfid in rbf_node.getrawmempool()
 
+    # call abandontransaction to make sure the wallet does not add the bump
+    # transaction back into the mempool.
+    rbf_node.abandontransaction(bumpid)
+
     # check that outputs from the rbf tx are not spendable before the
     # transaction is confirmed, due to the replaced_by_txid check in
     # CWallet::AvailableCoins
