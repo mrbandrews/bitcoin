@@ -99,13 +99,13 @@ def test_segwit_bumpfee_succeeds(rbf_node, dest_address):
     # which spends it, and make sure bumpfee can be called on it.
 
     segwit_in = next(u for u in rbf_node.listunspent() if u["amount"] == Decimal("0.001"))
-    segwit_out = rbf_node.validateaddress(rbf_node.getnewaddress())["pubkey"]
-    rbf_node.addwitnessaddress(rbf_node.addmultisigaddress(1, [segwit_out]))
+    segwit_out = rbf_node.validateaddress(rbf_node.getnewaddress())
+    rbf_node.addwitnessaddress(segwit_out["address"])
     segwitid = send_to_witness(
-        version=1,
+        version=0,
         node=rbf_node,
         utxo=segwit_in,
-        pubkey=segwit_out,
+        pubkey=segwit_out["pubkey"],
         encode_p2sh=False,
         amount=Decimal("0.0009"),
         sign=True)
