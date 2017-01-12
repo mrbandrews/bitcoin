@@ -49,22 +49,22 @@ class BumpFeeTest(BitcoinTestFramework):
         print("Mining blocks...")
         peer_node.generate(110)
         self.sync_all()
-        for i in range(10):
+        for i in range(25):
             peer_node.sendtoaddress(rbf_node_address, 0.001)
         self.sync_all()
         peer_node.generate(1)
         self.sync_all()
-        assert_equal(rbf_node.getbalance(), Decimal("0.01"))
+        assert_equal(rbf_node.getbalance(), Decimal("0.025"))
 
         print("Running tests")
         dest_address = peer_node.getnewaddress()
+        test_small_output_fails(rbf_node, dest_address)
+        test_dust_to_fee(rbf_node, dest_address)
         test_simple_bumpfee_succeeds(rbf_node, peer_node, dest_address)
         test_segwit_bumpfee_succeeds(rbf_node, dest_address)
         test_nonrbf_bumpfee_fails(peer_node, dest_address)
         test_notmine_bumpfee_fails(rbf_node, peer_node, dest_address)
         test_bumpfee_with_descendant_fails(rbf_node, rbf_node_address, dest_address)
-        test_small_output_fails(rbf_node, dest_address)
-        test_dust_to_fee(rbf_node, dest_address)
         test_settxfee(rbf_node, dest_address)
         test_rebumping(rbf_node, dest_address)
         test_unconfirmed_not_spendable(rbf_node, rbf_node_address)
@@ -163,20 +163,30 @@ def test_bumpfee_with_descendant_fails(rbf_node, rbf_node_address, dest_address)
 
 def test_small_output_fails(rbf_node, dest_address):
     # cannot bump fee with a too-small output
-    rbfid = create_fund_sign_send(rbf_node, {dest_address: 0.00090000})
-    rbf_node.bumpfee(rbfid, {"totalFee": 10000})
-    rbfid = create_fund_sign_send(rbf_node, {dest_address: 0.00090000})
-    assert_raises_message(JSONRPCException, "Change output is too small", rbf_node.bumpfee, rbfid, {"totalFee": 10001})
+    rbfid = spend_one_input(rbf_node,
+                            Decimal("0.00100000"),
+                            {dest_address: 0.00080000,
+                             get_change_address(rbf_node): Decimal("0.00010000")})
+    rbf_node.bumpfee(rbfid, {"totalFee": 20000})
+
+    rbfid = spend_one_input(rbf_node,
+                            Decimal("0.00100000"),
+                            {dest_address: 0.00080000,
+                             get_change_address(rbf_node): Decimal("0.00010000")})
+    assert_raises_message(JSONRPCException, "Change output is too small", rbf_node.bumpfee, rbfid, {"totalFee": 20001})
 
 
 def test_dust_to_fee(rbf_node, dest_address):
     # check that if output is reduced to dust, it will be converted to fee
     # the bumped tx sets fee=9900, but it converts to 10,000
-    rbfid = create_fund_sign_send(rbf_node, {dest_address: 0.00090000})
+    rbfid = spend_one_input(rbf_node,
+                            Decimal("0.00100000"),
+                            {dest_address: 0.00080000,
+                             get_change_address(rbf_node): Decimal("0.00010000")})
     fulltx = rbf_node.getrawtransaction(rbfid, 1)
-    bumped_tx = rbf_node.bumpfee(rbfid, {"totalFee": 9900})
+    bumped_tx = rbf_node.bumpfee(rbfid, {"totalFee": 19900})
     full_bumped_tx = rbf_node.getrawtransaction(bumped_tx["txid"], 1)
-    assert_equal(bumped_tx["fee"], Decimal("0.00010000"))
+    assert_equal(bumped_tx["fee"], Decimal("0.00020000"))
     assert_equal(len(fulltx["vout"]), 2)
     assert_equal(len(full_bumped_tx["vout"]), 1)  #change output is eliminated
 
@@ -249,6 +259,14 @@ def create_fund_sign_send(node, outputs):
     rawtx = node.createrawtransaction([], outputs)
     fundtx = node.fundrawtransaction(rawtx)
     signedtx = node.signrawtransaction(fundtx["hex"])
+    txid = node.sendrawtransaction(signedtx["hex"])
+    return txid
+
+
+def spend_one_input(node, input_amount, outputs):
+    input = dict(sequence=BIP125_SEQUENCE_NUMBER, **next(u for u in node.listunspent() if u["amount"] == input_amount))
+    rawtx = node.createrawtransaction([input], outputs)
+    signedtx = node.signrawtransaction(rawtx)
     txid = node.sendrawtransaction(signedtx["hex"])
     return txid
 
