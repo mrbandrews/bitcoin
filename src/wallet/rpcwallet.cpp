@@ -2603,17 +2603,24 @@ UniValue bumpfee(const JSONRPCRequest& request)
             "Alternatively, the user can specify totalFee, or use RPC setpaytxfee to set a higher fee rate.\n"
             "At a minimum, the new fee rate must be high enough to pay a new relay fee and to enter the node's mempool.\n"
             "\nArguments:\n"
-            "1. \"txid\"              (string, required) The txid to be bumped\n"
+            "1. txid                  (string, required) The txid to be bumped\n"
             "2. options               (object, optional)\n"
             "   {\n"
-            "     \"confTarget\":       \"n\",          (numeric, optional) Confirmation target (in blocks)\n"
-            "     \"totalFee\":         \"n\",          (numeric, optional) Total fee (NOT feerate) to pay, in satoshis\n"
+            "     \"confTarget\"        (numeric, optional) Confirmation target (in blocks)\n"
+            "     \"totalFee\"          (numeric, optional) Total fee (NOT feerate) to pay, in satoshis\n"
+            "     \"replaceable\"       (boolean, optional, default true) Whether the new transaction should still be\n"
+            "                         marked bip-125 replaceable. If true, the sequence numbers in the transaction will\n"
+            "                         be left unchanged from the original. If false, any input sequence numbers in the\n"
+            "                         original transaction that were less than 0xfffffffe will be increased to 0xfffffffe\n"
+            "                         so the new transaction will not be explicitly bip-125 replaceable (though it may\n"
+            "                         still be replacable in practice if it has unconfirmed ancestors which are\n"
+            "                         replaceable).\n"
             "   }\n"
             "\nResult:\n"
             "{\n"
             "  \"txid\":    \"value\",   (string)  The id of the new transaction\n"
-            "  \"oldfee\":    n,         (numeric) Fee of the replaced transaction\n"
-            "  \"fee\":       n,         (numeric) Fee of the new transaction\n"
+            "  \"oldfee\":  n,         (numeric) Fee of the replaced transaction\n"
+            "  \"fee\":     n,         (numeric) Fee of the new transaction\n"
             "}\n"
             "\nExamples:\n"
             "\nBump the fee, get the new transaction\'s txid\n" +
@@ -2671,6 +2678,7 @@ UniValue bumpfee(const JSONRPCRequest& request)
     // optional parameters
     int newConfirmTarget = nTxConfirmTarget;
     CAmount totalFee = 0;
+    bool replaceable = true;
     if (request.params.size() > 1) {
         UniValue options = request.params[1];
         if (options.size() > 2)
@@ -2679,6 +2687,7 @@ UniValue bumpfee(const JSONRPCRequest& request)
             {
                 {"confTarget", UniValueType(UniValue::VNUM)},
                 {"totalFee", UniValueType(UniValue::VNUM)},
+                {"replaceable", UniValueType(UniValue::VBOOL)},
             },
             true, true);
 
@@ -2694,6 +2703,10 @@ UniValue bumpfee(const JSONRPCRequest& request)
                 throw JSONRPCError(RPC_INVALID_PARAMETER, "Invalid totalFee (cannot be <= 0)");
             else if (totalFee > maxTxFee)
                 throw JSONRPCError(RPC_INVALID_PARAMETER, "Invalid totalFee (cannot be higher than maxTxFee)");
+        }
+
+        if (options.exists("replaceable") && !options["replaceable"].get_bool()) {
+            replaceable = false;
         }
     }
 
@@ -2753,6 +2766,13 @@ UniValue bumpfee(const JSONRPCRequest& request)
         LogPrint("rpc", "Bumping fee and discarding dust output\n");
         nNewFee += poutput->nValue;
         tx.vout.erase(tx.vout.begin() + nOutput);
+    }
+
+    // Mark new tx not replaceable, if requested.
+    if (!replaceable) {
+        for (auto& input : tx.vin) {
+            if (input.nSequence < 0xfffffffe) input.nSequence = 0xfffffffe;
+        }
     }
 
     // sign the new tx

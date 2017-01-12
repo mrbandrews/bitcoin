@@ -67,6 +67,7 @@ class BumpFeeTest(BitcoinTestFramework):
         test_bumpfee_with_descendant_fails(rbf_node, rbf_node_address, dest_address)
         test_settxfee(rbf_node, dest_address)
         test_rebumping(rbf_node, dest_address)
+        test_rebumping_not_replaceable(rbf_node, dest_address)
         test_unconfirmed_not_spendable(rbf_node, rbf_node_address)
         test_locked_wallet_fails(rbf_node, dest_address)
         print("Success")
@@ -210,6 +211,14 @@ def test_rebumping(rbf_node, dest_address):
     bumped = rbf_node.bumpfee(rbfid, {"totalFee": 1000})
     assert_raises_message(JSONRPCException, "already bumped", rbf_node.bumpfee, rbfid, {"totalFee": 2000})
     rbf_node.bumpfee(bumped["txid"], {"totalFee": 2000})
+
+
+def test_rebumping_not_replaceable(rbf_node, dest_address):
+    # check that re-bumping a non-replaceable bump tx fails
+    rbfid = create_fund_sign_send(rbf_node, {dest_address: 0.00090000})
+    bumped = rbf_node.bumpfee(rbfid, {"totalFee": 10000, "replaceable": False})
+    assert_raises_message(JSONRPCException, "Transaction is not BIP 125 replaceable", rbf_node.bumpfee, bumped["txid"],
+                          {"totalFee": 20000})
 
 
 def test_unconfirmed_not_spendable(rbf_node, rbf_node_address):
