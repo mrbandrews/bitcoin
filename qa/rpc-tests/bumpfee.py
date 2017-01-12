@@ -195,7 +195,8 @@ def test_settxfee(rbf_node, dest_address):
 
 def test_rebumping(rbf_node, dest_address):
     # check that re-bumping the original tx fails, but bumping the bumper succeeds
-    rbfid = create_fund_sign_send(rbf_node, {dest_address: 0.00090000}, Decimal("0.00001000"))
+    rbf_node.settxfee(Decimal("0.00001000"))
+    rbfid = create_fund_sign_send(rbf_node, {dest_address: 0.00090000})
     bumped = rbf_node.bumpfee(rbfid, {"totalFee": 1000})
     assert_raises_message(JSONRPCException, "already bumped", rbf_node.bumpfee, rbfid, {"totalFee": 2000})
     rbf_node.bumpfee(bumped["txid"], {"totalFee": 2000})
@@ -244,9 +245,7 @@ def test_locked_wallet_fails(rbf_node, dest_address):
                           rbf_node.bumpfee, rbfid)
 
 
-def create_fund_sign_send(node, outputs, feerate=0):
-    if feerate != 0:
-        node.settxfee(feerate)
+def create_fund_sign_send(node, outputs):
     rawtx = node.createrawtransaction([], outputs)
     fundtx = node.fundrawtransaction(rawtx)
     signedtx = node.signrawtransaction(fundtx["hex"])
