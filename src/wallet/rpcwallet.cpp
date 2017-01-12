@@ -2626,6 +2626,7 @@ UniValue bumpfee(const JSONRPCRequest& request)
     // retrieve the original tx from the wallet
     assert(pwalletMain != NULL);
     LOCK2(cs_main, pwalletMain->cs_wallet);
+    EnsureWalletIsUnlocked();
     if (!pwalletMain->mapWallet.count(hash))
         throw JSONRPCError(RPC_INVALID_ADDRESS_OR_KEY, "Invalid or non-wallet transaction id");
     CWalletTx& wtx = pwalletMain->mapWallet[hash];

@@ -16,6 +16,9 @@ import time
 # Sequence number that is BIP 125 opt-in and BIP 68-compliant
 BIP125_SEQUENCE_NUMBER = 0xfffffffd
 
+WALLET_PASSPHRASE = "test"
+WALLET_PASSPHRASE_TIMEOUT = 3600
+
 
 class BumpFeeTest(BitcoinTestFramework):
     def __init__(self):
@@ -24,28 +27,34 @@ class BumpFeeTest(BitcoinTestFramework):
         self.setup_clean_chain = True
 
     def setup_network(self, split=False):
-        self.nodes = []
-        common_args = ["-debug", "-prematurewitness", "-walletprematurewitness"]
-        self.nodes.append(start_node(0, self.options.tmpdir, common_args + ["-walletrbf"]))
-        self.nodes.append(start_node(1, self.options.tmpdir, common_args))
+        extra_args = [["-debug", "-prematurewitness", "-walletprematurewitness", "-walletrbf={}".format(i)]
+                      for i in range(self.num_nodes)]
+        self.nodes = start_nodes(self.num_nodes, self.options.tmpdir, extra_args)
+
+        # Encrypt wallet for test_locked_wallet_fails test
+        self.nodes[1].encryptwallet(WALLET_PASSPHRASE)
+        bitcoind_processes[1].wait()
+        self.nodes[1] = start_node(1, self.options.tmpdir, extra_args[1])
+        self.nodes[1].walletpassphrase(WALLET_PASSPHRASE, WALLET_PASSPHRASE_TIMEOUT)
+
         connect_nodes_bi(self.nodes, 0, 1)
         self.is_network_split = False
         self.sync_all()
 
     def run_test(self):
-        rbf_node, peer_node = self.nodes
+        peer_node, rbf_node = self.nodes
         rbf_node_address = rbf_node.getnewaddress()
 
         # fund rbf node with 10 coins of 0.001 btc (100,000 satoshis)
         print("Mining blocks...")
-        self.nodes[1].generate(110)
+        peer_node.generate(110)
         self.sync_all()
         for i in range(10):
-            self.nodes[1].sendtoaddress(rbf_node_address, 0.001)
+            peer_node.sendtoaddress(rbf_node_address, 0.001)
         self.sync_all()
-        self.nodes[1].generate(1)
+        peer_node.generate(1)
         self.sync_all()
-        assert_equal(self.nodes[0].getbalance(), Decimal("0.01"))
+        assert_equal(rbf_node.getbalance(), Decimal("0.01"))
 
         print("Running tests")
         dest_address = peer_node.getnewaddress()
@@ -59,6 +68,7 @@ class BumpFeeTest(BitcoinTestFramework):
         test_settxfee(rbf_node, dest_address)
         test_rebumping(rbf_node, dest_address)
         test_unconfirmed_not_spendable(rbf_node, rbf_node_address)
+        test_locked_wallet_fails(rbf_node, dest_address)
         print("Success")
 
 
@@ -225,6 +235,13 @@ def test_unconfirmed_not_spendable(rbf_node, rbf_node_address):
     assert_equal(
         sum(1 for t in rbf_node.listunspent(0)
             if t["txid"] == rbfid and t["address"] == rbf_node_address and t["spendable"]), 1)
+
+
+def test_locked_wallet_fails(rbf_node, dest_address):
+    rbfid = create_fund_sign_send(rbf_node, {dest_address: 0.00090000})
+    rbf_node.walletlock()
+    assert_raises_message(JSONRPCException, "Please enter the wallet passphrase with walletpassphrase first.",
+                          rbf_node.bumpfee, rbfid)
 
 
 def create_fund_sign_send(node, outputs, feerate=0):
