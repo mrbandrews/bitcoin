@@ -2798,8 +2798,13 @@ UniValue bumpfee(const JSONRPCRequest& request)
         throw JSONRPCError(RPC_WALLET_ERROR, strprintf("Error: The transaction was rejected! Reason given: %s", state.GetRejectReason()));
 
     // mark the original tx as bumped
-    if (!pwalletMain->MarkReplaced(wtx.GetHash(), wtxBumped.GetHash()))
+    if (!pwalletMain->MarkReplaced(wtx.GetHash(), wtxBumped.GetHash())) {
+        // TODO: see if JSON-RPC has a standard way of returning a response
+        // along with an exception. It would be good to return information about
+        // wtxBumped to the caller even if marking the original transaction
+        // replaced does not succeed for some reason.
         throw JSONRPCError(RPC_WALLET_ERROR, "Unable to mark the original transaction as replaced.");
+    }
 
     UniValue result(UniValue::VOBJ);
     result.push_back(Pair("txid", wtxBumped.GetHash().GetHex()));

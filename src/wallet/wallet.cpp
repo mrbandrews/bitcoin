@@ -838,8 +838,9 @@ bool CWallet::MarkReplaced(const uint256& originalHash, const uint256& newHash)
     LOCK(cs_wallet);
 
     auto mi = mapWallet.find(originalHash);
-    if (mi == mapWallet.end())
-        return false;
+
+    // There is a bug if MarkReplaced is not called on an existing wallet transaction.
+    assert(mi != mapWallet.end());
 
     CWalletTx& wtx = (*mi).second;
 
@@ -849,11 +850,16 @@ bool CWallet::MarkReplaced(const uint256& originalHash, const uint256& newHash)
     wtx.mapValue["replaced_by_txid"] = newHash.ToString();
 
     CWalletDB walletdb(strWalletFile, "r+");
-    walletdb.WriteTx(wtx);
+
+    bool success = true;
+    if (!walletdb.WriteTx(wtx)) {
+        LogPrintf("%s: Updating walletdb tx %s failed", __func__, wtx.GetHash().ToString());
+        success = false;
+    }
 
     NotifyTransactionChanged(this, originalHash, CT_UPDATED);
 
-    return true;
+    return success;
 }
 
 bool CWallet::AddToWallet(const CWalletTx& wtxIn, bool fFlushOnClose)
