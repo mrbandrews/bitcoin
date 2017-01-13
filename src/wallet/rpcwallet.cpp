@@ -2601,7 +2601,8 @@ UniValue bumpfee(const JSONRPCRequest& request)
             "By default, the new fee will be calculated automatically using estimatefee.\n"
             "The user can specify a confirmation target for estimatefee.\n"
             "Alternatively, the user can specify totalFee, or use RPC setpaytxfee to set a higher fee rate.\n"
-            "At a minimum, the new fee rate must be high enough to pay a new relay fee and to enter the node's mempool.\n"
+            "At a minimum, the new fee rate must be high enough to pay a new relay fee (relay fee amount returned\n"
+            "by getnetworkinfo RPC) and to enter the node's mempool.\n"
             "\nArguments:\n"
             "1. txid                  (string, required) The txid to be bumped\n"
             "2. options               (object, optional)\n"
@@ -2631,7 +2632,6 @@ UniValue bumpfee(const JSONRPCRequest& request)
     hash.SetHex(request.params[0].get_str());
 
     // retrieve the original tx from the wallet
-    assert(pwalletMain != NULL);
     LOCK2(cs_main, pwalletMain->cs_wallet);
     EnsureWalletIsUnlocked();
     if (!pwalletMain->mapWallet.count(hash))
@@ -2723,7 +2723,7 @@ UniValue bumpfee(const JSONRPCRequest& request)
     if (totalFee > 0) {
         CAmount minTotalFee = nOldFeeRate.GetFee(maxNewTxSize) + minRelayTxFee.GetFee(maxNewTxSize);
         if (totalFee < minTotalFee)
-            throw JSONRPCError(RPC_INVALID_PARAMETER, strprintf("Invalid totalFee, must be at least oldFee + relayFee: %s", FormatMoney(minTotalFee)));
+            throw JSONRPCError(RPC_INVALID_PARAMETER, strprintf("Invalid totalFee, must be at least %s (oldFee %s + relayFee %s)", FormatMoney(minTotalFee), nOldFeeRate.GetFee(maxNewTxSize), minRelayTxFee.GetFee(maxNewTxSize)));
         nNewFee = totalFee;
         nNewFeeRate = CFeeRate(totalFee, maxNewTxSize);
     } else {
@@ -2748,8 +2748,7 @@ UniValue bumpfee(const JSONRPCRequest& request)
     // moment earlier. In this case, we report an error to the user, who may use totalFee to make an adjustment.
     CFeeRate minMempoolFeeRate = mempool.GetMinFee(GetArg("-maxmempool", DEFAULT_MAX_MEMPOOL_SIZE) * 1000000);
     if (nNewFeeRate.GetFeePerK() < minMempoolFeeRate.GetFeePerK())
-        throw JSONRPCError(RPC_MISC_ERROR, strprintf("New fee rate (%s) is too low to get into the mempool (min rate: %s)",
-                                               FormatMoney(nNewFeeRate.GetFeePerK()), FormatMoney(minMempoolFeeRate.GetFeePerK())));
+        throw JSONRPCError(RPC_MISC_ERROR, strprintf("New fee rate (%s) is less than the minimum fee rate (%s) to get into the mempool. totalFee value should to be at least %s or settxfee value should be at least %s to add transaction.", FormatMoney(nNewFeeRate.GetFeePerK()), FormatMoney(minMempoolFeeRate.GetFeePerK()), FormatMoney(minMempoolFeeRate.GetFee(maxNewTxSize)), FormatMoney(minMempoolFeeRate.GetFeePerK())));
 
     // Now modify the output to increase the fee.
     // If the output is not large enough to pay the fee, fail.
