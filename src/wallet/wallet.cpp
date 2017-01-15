@@ -2032,8 +2032,9 @@ void CWallet::AvailableCoins(vector<COutput>& vCoins, bool fOnlyConfirmed, const
             // be a 1-block reorg away from the chain where transactions A and C
             // were accepted to another chain where B, B', and C were all
             // accepted.
-            if (nDepth == 0 && pcoin->mapValue.count("replaces_txid"))
+            if (nDepth == 0 && pcoin->mapValue.count("replaces_txid")) {
                 continue;
+            }
 
             // Similarly, we should not consider coins from transactions that
             // have been replaced. In the example above, we would want to prevent
@@ -2043,8 +2044,9 @@ void CWallet::AvailableCoins(vector<COutput>& vCoins, bool fOnlyConfirmed, const
             // intending to replace A', but potentially resulting in a scenario
             // where A, A', and D could all be accepted (instead of just B and
             // D, or just A and A' like the user would want).
-            if (nDepth == 0 && pcoin->mapValue.count("replaced_by_txid"))
+            if (nDepth == 0 && pcoin->mapValue.count("replaced_by_txid")) {
                 continue;
+            }
 
             for (unsigned int i = 0; i < pcoin->tx->vout.size(); i++) {
                 isminetype mine = IsMine(pcoin->tx->vout[i]);
