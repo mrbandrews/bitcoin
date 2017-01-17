@@ -2702,6 +2702,7 @@ UniValue bumpfee(const JSONRPCRequest& request)
     }
 
     // optional parameters
+    bool specifiedConfirmTarget = false;
     int newConfirmTarget = nTxConfirmTarget;
     CAmount totalFee = 0;
     bool replaceable = true;
@@ -2718,6 +2719,7 @@ UniValue bumpfee(const JSONRPCRequest& request)
         if (options.exists("confTarget") && options.exists("totalFee")) {
             throw JSONRPCError(RPC_INVALID_PARAMETER, "confTarget and totalFee options should not both be set. Please provide either a confirmation target for fee estimation or an explicit total fee for the transaction.");
         } else if (options.exists("confTarget")) {
+            specifiedConfirmTarget = true;
             newConfirmTarget = options["confTarget"].get_int();
             if (newConfirmTarget <= 0) { // upper-bound will be checked by estimatefee/smartfee
                 throw JSONRPCError(RPC_INVALID_PARAMETER, "Invalid confTarget (cannot be <= 0)");
@@ -2755,8 +2757,9 @@ UniValue bumpfee(const JSONRPCRequest& request)
         nNewFeeRate = CFeeRate(totalFee, maxNewTxSize);
     } else {
         // use the user-defined payTxFee if possible, otherwise use smartfee / fallbackfee
-        nNewFeeRate = payTxFee;
-        if (nNewFeeRate.GetFeePerK() == 0) {
+        if (!specifiedConfirmTarget && payTxFee.GetFeePerK() != 0) {
+            nNewFeeRate = payTxFee;
+        } else {
             nNewFeeRate = mempool.estimateSmartFee(newConfirmTarget);
         }
         if (nNewFeeRate.GetFeePerK() == 0) {
