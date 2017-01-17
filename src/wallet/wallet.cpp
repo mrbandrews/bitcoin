@@ -2032,7 +2032,7 @@ void CWallet::AvailableCoins(vector<COutput>& vCoins, bool fOnlyConfirmed, const
             // be a 1-block reorg away from the chain where transactions A and C
             // were accepted to another chain where B, B', and C were all
             // accepted.
-            if (nDepth == 0 && pcoin->mapValue.count("replaces_txid")) {
+            if (nDepth == 0 && fOnlyConfirmed && pcoin->mapValue.count("replaces_txid")) {
                 continue;
             }
 
@@ -2044,7 +2044,7 @@ void CWallet::AvailableCoins(vector<COutput>& vCoins, bool fOnlyConfirmed, const
             // intending to replace A', but potentially resulting in a scenario
             // where A, A', and D could all be accepted (instead of just B and
             // D, or just A and A' like the user would want).
-            if (nDepth == 0 && pcoin->mapValue.count("replaced_by_txid")) {
+            if (nDepth == 0 && fOnlyConfirmed && pcoin->mapValue.count("replaced_by_txid")) {
                 continue;
             }
 
