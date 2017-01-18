@@ -2368,7 +2368,7 @@ UniValue listunspent(const JSONRPCRequest& request)
             "    ]\n"
             "4. include_unsafe (bool, optional, default=true) Include outputs that are not safe to spend\n"
             "                  because they come from unconfirmed untrusted transactions or unconfirmed\n"
-            "                  replacement transactions (cases where we can't be sure a conflicting\n"
+            "                  replacement transactions (cases where we are less sure that a conflicting\n"
             "                  transaction won't be mined).\n"
             "\nResult\n"
             "[                   (array of json object)\n"
